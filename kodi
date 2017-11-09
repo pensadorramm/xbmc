@@ -1,1 +1,148 @@
 
+ 12 system/keymaps/keyboard.xml
+@@ -386,25 +386,19 @@
+     <keyboard>
+     <keyboard>
+       <f>FastForward</f>
+       <f>FastForward</f>
+       <r>Rewind</r>
+       <r>Rewind</r>
+-      <period>StepForward</period>
++      <backspace>OSD</backspace>
+-      <comma>StepBack</comma>
+-      <backspace>Fullscreen</backspace>
+       <backspace mod="longpress">Stop</backspace>
+       <backspace mod="longpress">Stop</backspace>
+-      <browser_back>Fullscreen</browser_back>
++      <browser_back>OSD</browser_back>
+       <browser_back mod="longpress">Stop</browser_back>
+       <browser_back mod="longpress">Stop</browser_back>
+       <return>OSD</return>
+       <return>OSD</return>
+       <enter>OSD</enter>
+       <enter>OSD</enter>
+-      <return mod="longpress">PlayPause</return>
+-      <enter mod="longpress">PlayPause</enter>
+       <m>OSD</m>
+       <m>OSD</m>
+       <menu>OSD</menu>
+       <menu>OSD</menu>
+       <i>Info</i>
+       <i>Info</i>
+       <o>CodecInfo</o>
+       <o>CodecInfo</o>
+       <z>AspectRatio</z>
+       <z>AspectRatio</z>
+       <zoom>AspectRatio</zoom>
+       <zoom>AspectRatio</zoom>
+-      <left>StepBack</left>
++      <escape>OSD</escape>
+-      <right>StepForward</right>
+-      <escape>Fullscreen</escape>
+     </keyboard>
+     </keyboard>
+   </FullscreenGame>
+   </FullscreenGame>
+   <GameOSD>
+   <GameOSD>
+79 xbmc/input/InputManager.cpp
+@@ -395,37 +395,11 @@ bool CInputManager::OnEvent(XBMC_Event& newEvent)
+   {
+   {
+     m_Keyboard.ProcessKeyDown(newEvent.key.keysym);
+     m_Keyboard.ProcessKeyDown(newEvent.key.keysym);
+     CKey key = m_Keyboard.TranslateKey(newEvent.key.keysym);
+     CKey key = m_Keyboard.TranslateKey(newEvent.key.keysym);
+-    if (key.GetButtonCode() == m_LastKey.GetButtonCode() && (m_LastKey.GetButtonCode() & CKey::MODIFIER_LONG))
++    OnKey(key);
+-    {
+-      // Do not repeat long presses
+-      break;
+-    }
+-    if (!m_buttonTranslator->HasLongpressMapping(g_windowManager.GetActiveWindowID(), key))
+-    {
+-      m_LastKey.Reset();
+-      OnKey(key);
+-    }
+-    else
+-    {
+-      if (key.GetButtonCode() != m_LastKey.GetButtonCode() && (key.GetButtonCode() & CKey::MODIFIER_LONG))
+-      {
+-        m_LastKey = key;  // OnKey is reentrant; need to do this before entering
+-        OnKey(key);
+-      }
+-      m_LastKey = key;
+-    }
+     break;
+     break;
+   }
+   }
+   case XBMC_KEYUP:
+   case XBMC_KEYUP:
+     m_Keyboard.ProcessKeyUp();
+     m_Keyboard.ProcessKeyUp();
+-    if (m_LastKey.GetButtonCode() != KEY_INVALID && !(m_LastKey.GetButtonCode() & CKey::MODIFIER_LONG))
+-    {
+-      CKey key = m_LastKey;
+-      m_LastKey.Reset();  // OnKey is reentrant; need to do this before entering
+-      OnKey(key);
+-    }
+-    else
+-      m_LastKey.Reset();
+     OnKeyUp(m_Keyboard.TranslateKey(newEvent.key.keysym));
+     OnKeyUp(m_Keyboard.TranslateKey(newEvent.key.keysym));
+     break;
+     break;
+   case XBMC_MOUSEBUTTONDOWN:
+   case XBMC_MOUSEBUTTONDOWN:
+@@ -518,12 +492,52 @@ bool CInputManager::OnEvent(XBMC_Event& newEvent)
+ 
+ 
+ bool CInputManager::OnKey(const CKey& key)
+ bool CInputManager::OnKey(const CKey& key)
+ {
+ {
++  bool bHandled = false;
++
+   for (std::vector<KEYBOARD::IKeyboardHandler*>::iterator it = m_keyboardHandlers.begin(); it != m_keyboardHandlers.end(); ++it)
+   for (std::vector<KEYBOARD::IKeyboardHandler*>::iterator it = m_keyboardHandlers.begin(); it != m_keyboardHandlers.end(); ++it)
+   {
+   {
+     if ((*it)->OnKeyPress(key))
+     if ((*it)->OnKeyPress(key))
+-      return true;
++    {
++      bHandled = true;
++      break;
++    }
++  }
++
++  if (bHandled)
++  {
++    m_LastKey.Reset();
++  }
++  else
++  {
++    if (key.GetButtonCode() == m_LastKey.GetButtonCode() && (m_LastKey.GetButtonCode() & CKey::MODIFIER_LONG))
++    {
++      // Do not repeat long presses
++    }
++    else
++    {
++      if (!m_buttonTranslator->HasLongpressMapping(g_windowManager.GetActiveWindowID(), key))
++      {
++        m_LastKey.Reset();
++        bHandled = HandleKey(key);
++      }
++      else
++      {
++        if (key.GetButtonCode() != m_LastKey.GetButtonCode() && (key.GetButtonCode() & CKey::MODIFIER_LONG))
++        {
++          m_LastKey = key;  // OnKey is reentrant; need to do this before entering
++          bHandled = HandleKey(key);
++        }
++
++        m_LastKey = key;
++      }
++    }
+   }
